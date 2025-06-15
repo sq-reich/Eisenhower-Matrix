@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}ToDo Liste{% endblock %}
+{% block page_heading %} 
+<i class="fas fa-clipboard-list me-2"></i>Meine ToDo-Liste
+{% endblock %}
+
+{% block content %}
+<div class="pb-5">
+    <form action="/add" method="post" class="mb-4 todo-form" autocomplete="off">
+        <div class="mb-3">
+            <label for="todo-input" class="form-label">Was möchtest du erledigen?</label>
+            <input type="text" id="todo-input" name="title" class="form-control"
+                placeholder="Zum Beispiel: Hausaufgaben" required autofocus />
+        </div>
+
+        <div class="mb-3">
+            <label for="due-date" class="form-label">Fälligkeitsdatum</label>
+            <input type="date" id="due-date" name="due_date" class="form-control" required min="{{ current_date }}" />
+        </div>
+
+        <div class="mb-3 custom-select-wrapper">
+            <label for="priority" class="form-label">Priorität</label>
+            <div class="custom-select" tabindex="0" aria-haspopup="listbox" role="combobox" aria-expanded="false"
+                id="customPriority">
+                <span class="selected">Mittel</span>
+            </div>
+            <ul class="select-options" role="listbox" aria-labelledby="customPriority">
+                <li role="option" data-value="low">Niedrig</li>
+                <li role="option" data-value="medium" class="selected" aria-selected="true">Mittel</li>
+                <li role="option" data-value="high">Hoch</li>
+            </ul>
+            <input type="hidden" name="priority" value="medium" id="priority">
+        </div>
+
+        <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-outline-primary">
+                <i class="fas fa-plus me-2"></i>Hinzufügen
+            </button>
+        </div>
+    </form>
+
+    {% for todo in todo_list %}
+    <div class="todo-card d-flex flex-column mb-3 p-3 border rounded shadow-sm">
+        <!-- Anzeige-Modus -->
+        <div class="d-flex justify-content-between align-items-start">
+            <div>
+                <!-- Hier wird die Klasse strikethrough gesetzt, wenn erledigt -->
+                <div class="todo-title-text fw-bold {% if todo.complete %}strikethrough{% endif %}">{{ todo.title }}
+                </div>
+                {% if todo.due_date %}
+                <small class="text-muted">Fällig: {{ todo.due_date.strftime('%d.%m.%Y') }}</small><br />
+                {% endif %}
+                <div>
+                    Priorität:
+                    {% if todo.priority == 'high' %}
+                    <span class="badge bg-danger">Hoch</span>
+                    {% elif todo.priority == 'medium' %}
+                    <span class="badge bg-warning text-dark">Mittel</span>
+                    {% else %}
+                    <span class="badge bg-secondary">Niedrig</span>
+                    {% endif %}
+                </div>
+                Status:
+                {% if todo.complete %}
+                <span class="status-badge badge bg-success mt-1"><i class="fas fa-check"></i> Erledigt</span>
+                {% else %}
+                <span class="status-badge badge bg-secondary mt-1">⏳ Offen</span>
+                {% endif %}
+            </div>
+            <div class="todo-actions d-flex flex-column gap-2 ms-3">
+                <a href="/update/{{ todo.id }}" class="btn btn-outline-success btn-sm" title="Status ändern">
+                    {% if todo.complete %}
+                    <!-- Ist erledigt → Button zeigt X zum "wieder Offen setzen" -->
+                    <i class="fas fa-times"></i>
+                    {% else %}
+                    <!-- Ist offen → Button zeigt Check zum "Erledigt setzen" -->
+                    <i class="fas fa-check"></i>
+                    {% endif %}
+                </a>
+
+                <button class="btn btn-outline-secondary btn-sm edit-toggle" data-id="{{ todo.id }}">
+                    ✏ Bearbeiten
+                </button>
+                <a href="/delete/{{ todo.id }}" class="btn btn-outline-danger btn-sm"
+                    onclick="return confirm('Wirklich löschen?')">
+                    <i class="fas fa-trash"></i>
+                </a>
+            </div>
+        </div>
+
+        <!-- Bearbeiten-Formular -->
+        <form action="/edit/{{ todo.id }}" method="post" class="edit-form mt-3 d-none">
+            <div class="mb-2">
+                <input type="text" name="title" class="form-control" value="{{ todo.title }}" required />
+            </div>
+            <div class="mb-2">
+                <input type="date" name="due_date" class="form-control"
+                    value="{{ todo.due_date.strftime('%Y-%m-%d') if todo.due_date }}" min="{{ current_date }}" />
+            </div>
+            <div class="mb-2">
+                <select name="priority" class="form-select">
+                    <option value="low" {% if todo.priority=='low' %}selected{% endif %}>Niedrig</option>
+                    <option value="medium" {% if todo.priority=='medium' %}selected{% endif %}>Mittel</option>
+                    <option value="high" {% if todo.priority=='high' %}selected{% endif %}>Hoch</option>
+                </select>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm">Speichern</button>
+                <button type="button" class="btn btn-secondary btn-sm cancel-edit">Abbrechen</button>
+            </div>
+        </form>
+    </div>
+    {% endfor %}
+
+    <form action="/clear" method="post" onsubmit="return confirm('Willst du wirklich ALLE Aufgaben löschen?')"
+        class="mt-4">
+        <div class="d-grid">
+            <button type="submit" class="btn btn-outline-danger">
+                <i class="fas fa-trash me-2"></i>Alle löschen
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
