@@ -1,0 +1,41 @@
+{% macro render_tasks(todos, title, bg_class, importance, urgency, text_class="text-white") %}
+{% set filtered = todos
+| selectattr("property.importance", "equalto", importance)
+| selectattr("property.urgency", "equalto", urgency)
+| selectattr("property.completed", "equalto", false)
+| list %}
+<div class="col-md-6">
+    <div class="p-4 border {{ bg_class }} {{ text_class }} h-100">
+        <h4>{{ title }}</h4>
+        <p>
+            {% if importance and urgency %}Sofort selbst erledigen{% endif %}
+            {% if importance and not urgency %}Planen & erledigen{% endif %}
+            {% if not importance and urgency %}Delegieren wenn möglich{% endif %}
+            {% if not importance and not urgency %}Ignorieren oder verschieben{% endif %}
+        </p>
+
+        {% if filtered %}
+        {% for task in filtered %}
+        <div class="d-flex align-items-start justify-content-start mb-2 bg-white text-dark rounded p-2">
+
+            <div>
+                <input type="checkbox" class="status-toggle" data-id="{{ task.id }}" {% if
+                    task.property.completed %}checked{% endif %} title="Erledigt markieren">
+
+                <strong>{{ task.title }}</strong><br>
+                <small>
+                    {% if task.created_date %}
+                    Erstellt: {{ task.created_date.strftime('%d.%m.%Y') }}
+                    {% else %}
+                    Erstellt: unbekannt
+                    {% endif %}
+                </small>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p class="{{ text_class }}-50">Keine Aufgaben</p>
+        {% endif %}
+    </div>
+</div>
+{% endmacro %}

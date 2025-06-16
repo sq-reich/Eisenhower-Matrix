@@ -1,46 +1,40 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard{% endblock %}
+{% import "macros.html" as m %}
 
+{% block title %}Dashboard{% endblock %}
 {% block page_heading %}Dashboard{% endblock %}
 
 {% block content %}
-<!-- Eisenhower Matrix -->
 <h2 class="text-center mb-4">Eisenhower-Matrix</h2>
+
 <div class="row g-4">
-  <!-- Quadrant 1 -->
-  <div class="col-md-6">
-    <div class="p-4 border  bg-success text-white h-100">
-      <h4>Wichtig & Dringend</h4>
-      <p class="mb-2">Sofort selbst erledigen</p>
-    </div>
-  </div>
-
-  <!-- Quadrant 2 -->
-  <div class="col-md-6 ">
-    <div class="p-4 border  bg-primary text-white h-100">
-      <h4>Wichtig, nicht Dringend</h4>
-      <p class="mb-2">Aufgaben terminieren & selbst erledigen</p>
-    </div>
-  </div>
-
-  <!-- Quadrant 3 -->
-  <div class="col-md-6">
-    <div class="p-4 border  bg-warning text-dark h-100">
-      <h4>Nicht wichtig, aber Dringend</h4>
-      <p class="mb-2">Delegieren, wenn möglich</p>
-    </div>
-  </div>
-
-  <!-- Quadrant 4 -->
-  <div class="col-md-6">
-    <div class="p-4 border  bg-secondary text-white h-100">
-      <h4>Nicht wichtig & nicht Dringend</h4>
-      <p class="mb-2">Eliminieren oder ignorieren</p>
-    </div>
-  </div>
+  {{ m.render_tasks(todos, "Wichtig & Dringend", "bg-success", true, true, "text-white") }}
+  {{ m.render_tasks(todos, "Wichtig & nicht Dringend", "bg-primary", true, false, "text-white") }}
+  {{ m.render_tasks(todos, "Nicht Wichtig & Dringend", "bg-warning text-dark", false, true, "text-dark") }}
+  {{ m.render_tasks(todos, "Nicht Wichtig & nicht Dringend", "bg-secondary", false, false, "text-white") }}
 </div>
+{% endblock %}
 
-
-<!-- Deine Dashboard-Cards oder ToDo-Liste hier -->
+{% block scripts %}
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll(".status-toggle").forEach(checkbox => {
+      checkbox.addEventListener("change", async (e) => {
+        const taskId = e.target.getAttribute("data-id");
+        try {
+          const response = await fetch(`/update/${taskId}`, { method: "POST" });
+          if (response.ok) {
+            location.reload(); // alternativ: per JS durchstreichen statt reload
+          } else {
+            alert("Fehler beim Aktualisieren.");
+          }
+        } catch (err) {
+          console.error("Fehler:", err);
+          alert("Verbindungsfehler");
+        }
+      });
+    });
+  });
+</script>
 {% endblock %}

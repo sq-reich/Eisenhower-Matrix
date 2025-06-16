@@ -1,21 +1,21 @@
 from fastapi import FastAPI, Depends, Request, Form, status, HTTPException
 from fastapi.responses import JSONResponse, RedirectResponse
-from starlette.templating import Jinja2Templates
-from sqlalchemy.orm import Session
-from datetime import datetime, date
-
-import models
-from database import SessionLocal, engine
-
 from fastapi.staticfiles import StaticFiles
+from starlette.templating import Jinja2Templates
+from sqlalchemy.orm import Session, joinedload
+from datetime import datetime
+from database import SessionLocal, engine
+from models import Task, Property, Base
 
-models.Base.metadata.create_all(bind=engine)
+# DB-Tabellen erstellen
+Base.metadata.create_all(bind=engine)
 
 # App-Setup
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
+# DB-Zugriffsfunktion
 def get_db():
     db = SessionLocal()
     try:
@@ -23,115 +23,114 @@ def get_db():
     finally:
         db.close()
 
+# Weiterleitung zur Matrix
 @app.get("/")
 async def root():
     return RedirectResponse(url="/dashboard")
 
+# DASHBOARD: Eisenhower-Matrix
 @app.get("/dashboard")
-async def dashboard(request: Request):
-    return templates.TemplateResponse("dashboard.html", {"request": request})
+async def dashboard(request: Request, db: Session = Depends(get_db)):
+    todos = db.query(Task).options(joinedload(Task.property)).all()
+    return templates.TemplateResponse("dashboard.html", {
+        "request": request,
+        "todos": todos
+    })
 
+# KALENDER
 @app.get("/calendar")
 async def calendar(request: Request):
     return templates.TemplateResponse("calendar.html", {"request": request})
 
-# Todos anzeigen
+# TODO-LISTE
 @app.get("/todos")
 def todos(request: Request, db: Session = Depends(get_db)):
-    todos = db.query(models.Todo).all()
-    today = date.today().strftime("%Y-%m-%d")
+    todos = db.query(Task).options(joinedload(Task.property)).all()
     return templates.TemplateResponse("todos.html", {
         "request": request,
         "todo_list": todos,
-        "current_date": today
+        "current_date": datetime.today().strftime("%Y-%m-%d")
     })
 
-# ToDo hinzufügen mit Validierung
+# NEUE Aufgabe + Eigenschaften hinzufügen
 @app.post("/add")
-def add(
+def add_task(
     request: Request,
     title: str = Form(...),
-    due_date: str = Form(None),
-    priority: str = Form("medium"),
+    importance: bool = Form(False),
+    urgency: bool = Form(False),
     db: Session = Depends(get_db)
 ):
-    due_date_obj = None
-    if due_date:
-        try:
-            due_date_obj = datetime.strptime(due_date, "%Y-%m-%d").date()
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Ungültiges Datum")
-        
-        if due_date_obj < date.today():
-            raise HTTPException(status_code=400, detail="Datum darf nicht in der Vergangenheit liegen.")
+    new_task = Task(title=title.strip())
+    db.add(new_task)
+    db.commit()
+    db.refresh(new_task)
 
-    new_todo = models.Todo(
-        title=title.strip(),
-        due_date=due_date_obj,
-        priority=priority
+    new_property = Property(
+        importance=importance,
+        urgency=urgency,
+        completed=False,
+        task_id=new_task.id
     )
-    db.add(new_todo)
+    db.add(new_property)
     db.commit()
 
     return RedirectResponse(url="/todos", status_code=status.HTTP_303_SEE_OTHER)
 
-# Status toggeln (POST, JSON Response)
-@app.post("/update/{todo_id}")
-def update(todo_id: int, db: Session = Depends(get_db)):
-    todo = db.query(models.Todo).filter(models.Todo.id == todo_id).first()
-    if not todo:
-        raise HTTPException(status_code=404, detail="ToDo nicht gefunden")
-    
-    todo.complete = not todo.complete
+# STATUS (done) toggeln
+@app.post("/update/{task_id}")
+def update_status(task_id: int, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task or not task.property:
+        raise HTTPException(status_code=404, detail="Aufgabe nicht gefunden")
+
+    task.property.completed = not task.property.completed
     db.commit()
 
-    return JSONResponse(
-        content={"complete": todo.complete},
-        status_code=200
-    )
+    return JSONResponse(content={"complete": task.property.completed}, status_code=200)
 
-# ToDo löschen
-@app.get("/delete/{todo_id}")
-def delete(request: Request, todo_id: int, db: Session = Depends(get_db)):
-    todo = db.query(models.Todo).filter(models.Todo.id == todo_id).first()
-    if todo:
-        db.delete(todo)
+
+# LÖSCHEN einer Aufgabe
+@app.get("/delete/{task_id}")
+def delete_task(task_id: int, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if task:
+        db.delete(task)
         db.commit()
     return RedirectResponse(url="/todos", status_code=status.HTTP_302_FOUND)
 
-@app.post("/edit/{todo_id}")
-def edit_todo(
-    todo_id: int,
+# BEARBEITEN einer Aufgabe (Titel, Wichtigkeit, Dringlichkeit)
+@app.post("/edit/{task_id}")
+def edit_task(
+    
+    task_id: int,
     title: str = Form(...),
-    due_date: str = Form(None),
-    priority: str = Form("medium"),
+    importance: bool = Form(False),
+    urgency: bool = Form(False),
     db: Session = Depends(get_db)
 ):
-    todo = db.query(models.Todo).filter(models.Todo.id == todo_id).first()
-    if not todo:
-        raise HTTPException(status_code=404, detail="ToDo nicht gefunden")
+    print("EDIT:", task_id, title, importance, urgency)
+    # Task holen
+    task = db.query(Task).filter(Task.id == task_id).first()
 
-    todo.title = title.strip()
-    todo.priority = priority
+    if not task:
+        raise HTTPException(status_code=404, detail="Aufgabe nicht gefunden")
 
-    if due_date:
-        try:
-            due_date_obj = datetime.strptime(due_date, "%Y-%m-%d").date()
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Ungültiges Datum")
+    if not task.property:
+        raise HTTPException(status_code=404, detail="Eigenschaften fehlen zur Aufgabe")
 
-        if due_date_obj < date.today():
-            raise HTTPException(status_code=400, detail="Datum darf nicht in der Vergangenheit liegen.")
-
-        todo.due_date = due_date_obj
-    else:
-        todo.due_date = None
+    # Aktualisieren
+    task.title = title.strip()
+    task.property.importance = importance
+    task.property.urgency = urgency
 
     db.commit()
     return RedirectResponse(url="/todos", status_code=status.HTTP_303_SEE_OTHER)
 
+# ALLE Aufgaben löschen
 @app.post("/clear")
-def clear_all_todos(request: Request, db: Session = Depends(get_db)):
-    db.query(models.Todo).delete()
+def clear_all(db: Session = Depends(get_db)):
+    db.query(Property).delete()
+    db.query(Task).delete()
     db.commit()
     return RedirectResponse(url="/todos", status_code=status.HTTP_303_SEE_OTHER)
